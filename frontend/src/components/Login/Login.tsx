@@ -14,8 +14,11 @@ import { useNavigate } from "react-router-dom";
 import { signup, login } from "../../actions/login";
 import LockIcon from "@mui/icons-material/LockOutlined";
 import { styles } from "./styles";
+import { SignupFormData, UserData } from "../../types/actionTypes";
+import { ThunkDispatch } from "redux-thunk";
+import { AnyAction } from "redux";
 
-const formDataInitVal = {
+const formDataInitVal: SignupFormData = {
   firstName: "",
   lastName: "",
   email: "",
@@ -23,35 +26,47 @@ const formDataInitVal = {
   confirmPassword: "",
 };
 
-const Login = () => {
-  const [formData, setFormData] = useState(formDataInitVal);
-  const [showPassword, setShowPassword] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(true);
-  const user = localStorage.getItem("profile")
-    ? jwtDecode(JSON.parse(localStorage.getItem("profile")).token)
-    : "null";
+const Login: React.FC = () => {
+  const [formData, setFormData] = useState<SignupFormData>(formDataInitVal);
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(true);
+  
+  let profile = null;
+  try {
+    const profileStr = localStorage.getItem("profile");
+    if (profileStr) {
+      profile = JSON.parse(profileStr);
+    }
+  } catch (error) {
+    console.error("Error parsing profile from localStorage:", error);
+  }
+  
+  const user = profile?.token ? jwtDecode<UserData>(profile.token) : "null";
 
-  const dispatch = useDispatch();
+  const dispatch = useDispatch<ThunkDispatch<any, any, AnyAction>>();
   const history = useNavigate();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (isLoggedIn) {
-      dispatch(login(formData, history));
+      dispatch(login({
+        email: formData.email,
+        password: formData.password
+      }, history));
     } else {
       dispatch(signup(formData, history));
     }
   };
 
-  const handleChange = (e) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleShowPassword = (e) => {
+  const handleShowPassword = () => {
     setShowPassword((prevPassword) => !prevPassword);
   };
 
-  const switchLogin = (e) => {
+  const switchLogin = () => {
     setIsLoggedIn((prevState) => !prevState);
   };
 
@@ -64,13 +79,12 @@ const Login = () => {
         <Container component="main" maxWidth="xs">
           <Paper sx={styles.paper} elevation={3}>
             <Avatar sx={styles.avatar}>
-              {" "}
               <LockIcon />
             </Avatar>
             <Typography variant="h5" color="primary">
-              {isLoggedIn ? "Login" : "Logout"}
+              {isLoggedIn ? "Login" : "Signup"}
             </Typography>
-            <form sx={styles.form} onSubmit={handleSubmit}>
+            <form style={styles.form} onSubmit={handleSubmit}>
               <Grid container spacing={2}>
                 {!isLoggedIn && (
                   <>

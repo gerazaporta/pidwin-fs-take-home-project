@@ -1,9 +1,11 @@
+import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/user.js";
+import { LoginRequest } from "../types/index.js";
 
-const login = async (req, res) => {
-  const { email, password } = req.body;
+const login = async (req: Request, res: Response) => {
+  const { email, password }: LoginRequest = req.body;
 
   try {
     const existingUser = await User.findOne({ email });
@@ -34,6 +36,7 @@ const login = async (req, res) => {
 
     res.status(200).json({ token });
   } catch (error) {
+    console.error("Login error:", error);
     res.status(500).json({ message: "Something went wrong" });
   }
 };

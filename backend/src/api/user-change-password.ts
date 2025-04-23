@@ -1,8 +1,10 @@
+import { Response } from "express";
 import bcrypt from "bcryptjs";
 import User from "../models/user.js";
+import { AuthRequest, PasswordChangeRequest } from "../types/index.js";
 
-const changePassword = async (req, res) => {
-  const { email, oldPassword, newPassword } = req.body;
+const changePassword = async (req: AuthRequest, res: Response) => {
+  const { email, oldPassword, newPassword }: PasswordChangeRequest = req.body;
 
   try {
     const existingUser = await User.findOne({ email });
@@ -12,7 +14,7 @@ const changePassword = async (req, res) => {
     }
 
     if (!req.userId) {
-      return res.json({ message: "Unauthenticated" });
+      return res.status(401).json({ message: "Unauthenticated" });
     }
 
     const isPasswordCorrect = await bcrypt.compare(
@@ -33,6 +35,7 @@ const changePassword = async (req, res) => {
 
     res.status(200).json(updatePassword);
   } catch (error) {
+    console.error("Change password error:", error);
     res.status(500).json({ message: "Something went wrong" });
   }
 };

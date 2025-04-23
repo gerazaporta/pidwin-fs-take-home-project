@@ -1,6 +1,14 @@
+import { SxProps, Theme } from "@mui/material";
 import { theme } from "../../themes/Default";
 
-export const styles = {
+interface StylesInterface {
+  paper: SxProps<Theme>;
+  avatar: SxProps<Theme>;
+  form: React.CSSProperties;
+  submit: SxProps<Theme>;
+}
+
+export const styles: StylesInterface = {
   paper: {
     marginTop: theme.spacing(8),
     display: "flex",

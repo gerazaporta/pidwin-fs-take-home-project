@@ -1,8 +1,19 @@
+import { SxProps, Theme } from "@mui/material";
 import { theme } from "../../themes/Default";
-
 import { deepPurple } from "@mui/material/colors";
 
-export const styles = {
+interface StylesInterface {
+  appBar: SxProps<Theme>;
+  heading: SxProps<Theme>;
+  toolbar: SxProps<Theme>;
+  profile: React.CSSProperties;
+  userName: SxProps<Theme>;
+  brandContainer: React.CSSProperties;
+  purple: SxProps<Theme>;
+  logout?: SxProps<Theme>;
+}
+
+export const styles: StylesInterface = {
   appBar: {
     borderRadius: 15,
     margin: "30px 0",

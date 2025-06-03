@@ -1,5 +1,6 @@
 import { Request } from 'express';
 import { JwtPayload } from 'jsonwebtoken';
+import { Document } from 'mongoose';
 
 export interface UserDocument {
   _id: string;
@@ -7,6 +8,7 @@ export interface UserDocument {
   email: string;
   password: string;
   id?: string;
+  tokens: number;
 }
 
 export interface LoginRequest {
@@ -33,8 +35,32 @@ export interface UserJwtPayload extends JwtPayload {
   name: string;
   email: string;
   password: string;
+  tokens: number;
 }
 
 export interface AuthRequest extends Request {
   userId?: string;
+}
+
+export interface GameDocument extends Document {
+  _id: string;
+  rollTime: Date;
+  dice1: number;
+  dice2: number;
+  isLucky7: boolean;
+}
+
+export interface WagerDocument extends Document {
+  _id: string;
+  userId: string;
+  gameId: string;
+  amount: number;
+  isLucky7Wager: boolean;
+  hasWon: boolean;
+  winStreak: number;
+}
+
+export interface WagerRequest {
+  amount: number;
+  isLucky7Wager: boolean;
 }

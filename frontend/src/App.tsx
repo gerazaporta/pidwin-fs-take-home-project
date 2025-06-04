@@ -9,6 +9,7 @@ import Navbar from "./components/Navbar/Navbar";
 import Login from "./components/Login/Login";
 import Home from "./components/Home/Home";
 import PasswordSetting from "./components/PasswordSettings/PasswordSettings";
+import WinStreaks from "./components/WinStreaks/WinStreaks";
 
 const App: React.FC = () => {
   return (
@@ -30,6 +31,7 @@ const App: React.FC = () => {
           <Route path="/" element={<Home />} />
           <Route path="/auth" element={<Login />} />
           <Route path="/password" element={<PasswordSetting />} />
+          <Route path="/win-streaks" element={<WinStreaks />} />
         </Routes>
       </Container>
     </BrowserRouter>

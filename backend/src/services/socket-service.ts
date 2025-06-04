@@ -111,6 +111,71 @@ class SocketService {
     // Emit the token update event to all sockets in the user's room
     this.io.to(room).emit('token_update', { tokens });
   }
+
+  // Send roll result to a specific user
+  notifyRollResult(userId: string, hasWon: boolean, winnings: number, diceSum: number) {
+    if (!this.io) {
+      console.error('Socket.io server not initialized');
+      return;
+    }
+
+    // Get the room for this user
+    const room = `user:${userId}`;
+
+    // Check if the user has any active sockets
+    const socketsInRoom = this.io.sockets.adapter.rooms.get(room);
+    const socketCount = socketsInRoom ? socketsInRoom.size : 0;
+
+    console.log(`Emitting roll result for user ${userId}: ${hasWon ? 'Win' : 'Loss'} (${socketCount} active connections)`);
+
+    if (socketCount === 0) {
+      console.warn(`No active sockets found for user ${userId}, roll result may not be delivered`);
+    }
+
+    // Emit the roll result event to all sockets in the user's room
+    this.io.to(room).emit('roll_result', { 
+      hasWon, 
+      winnings,
+      diceSum
+    });
+  }
+
+  // Send recent rolls to a specific user
+  sendUserRecentRolls(userId: string, recentRolls: any[]) {
+    if (!this.io) {
+      console.error('Socket.io server not initialized');
+      return;
+    }
+
+    // Get the room for this user
+    const room = `user:${userId}`;
+
+    // Check if the user has any active sockets
+    const socketsInRoom = this.io.sockets.adapter.rooms.get(room);
+    const socketCount = socketsInRoom ? socketsInRoom.size : 0;
+
+    console.log(`Sending recent rolls to user ${userId}: ${recentRolls.length} rolls (${socketCount} active connections)`);
+
+    if (socketCount === 0) {
+      console.warn(`No active sockets found for user ${userId}, recent rolls may not be delivered`);
+    }
+
+    // Emit the recent rolls event to all sockets in the user's room
+    this.io.to(room).emit('recent_rolls', recentRolls);
+  }
+
+  // Broadcast win streaks to all connected clients
+  broadcastWinStreaks(winStreaks: any[]) {
+    if (!this.io) {
+      console.error('Socket.io server not initialized');
+      return;
+    }
+
+    console.log(`Broadcasting win streaks to all clients: ${winStreaks.length} streaks`);
+
+    // Emit the win streaks event to all connected clients
+    this.io.emit('win_streaks', winStreaks);
+  }
 }
 
 // Create a singleton instance

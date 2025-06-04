@@ -87,6 +87,9 @@ The backend uses Socket.io for real-time communication:
 
 - `authenticate`: Client sends user ID to authenticate
 - `token_update`: Server sends updated token count to client
+- `roll_result`: Server sends dice roll results to client
+- `recent_rolls`: Server sends recent roll history to client
+- `win_streaks`: Server broadcasts top win streaks to all clients
 
 ## Docker
 

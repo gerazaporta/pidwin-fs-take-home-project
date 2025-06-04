@@ -6,6 +6,7 @@ import {useDispatch} from "react-redux";
 import {ThunkDispatch} from "redux-thunk";
 import {AnyAction} from "redux";
 import {placeWager} from "../../actions/game";
+import RecentRolls from "../RecentRolls/RecentRolls";
 
 const Home: React.FC = () => {
   const [wagerAmount, setWagerAmount] = useState<string>("");
@@ -106,6 +107,7 @@ const Home: React.FC = () => {
             </Box>
           )}
         </Paper>
+        {user !== null && <RecentRolls />}
       </Container>
     </Grow>
   );

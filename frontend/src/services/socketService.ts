@@ -1,11 +1,41 @@
 import { io, Socket } from 'socket.io-client';
 
+interface RollResult {
+  hasWon: boolean;
+  winnings: number;
+  diceSum: number;
+}
+
+interface RecentRoll {
+  id: string;
+  dice1: number;
+  dice2: number;
+  diceSum: number;
+  isLucky7: boolean;
+  rollTime: string;
+  amount: number;
+  hasWon: boolean;
+  isLucky7Wager: boolean;
+}
+
+interface WinStreak {
+  username: string;
+  winStreak: number;
+  amount: number;
+  isLucky7Wager: boolean;
+}
+
 class SocketService {
   private socket: Socket | null = null;
   private tokenUpdateCallbacks: ((tokens: number) => void)[] = [];
+  private rollResultCallbacks: ((result: RollResult) => void)[] = [];
+  private recentRollsCallbacks: ((rolls: RecentRoll[]) => void)[] = [];
+  private winStreaksCallbacks: ((streaks: WinStreak[]) => void)[] = [];
 
   // Initialize the socket connection
   initialize() {
+    console.log('Socket initialization requested');
+
     // If socket already exists and is connected, return early
     if (this.socket && this.socket.connected) {
       console.log('Socket already connected, skipping initialization');
@@ -14,6 +44,7 @@ class SocketService {
 
     // If socket exists but is disconnected, clean it up first
     if (this.socket) {
+      console.log('Cleaning up existing socket');
       this.socket.removeAllListeners();
       this.socket.disconnect();
       this.socket = null;
@@ -27,10 +58,26 @@ class SocketService {
     }
 
     try {
-      const { token } = JSON.parse(profile);
-      if (!token) {
+      const parsedProfile = JSON.parse(profile);
+      if (!parsedProfile.token) {
         console.log('No token found, skipping socket initialization');
         return;
+      }
+
+      // Log user ID from token for debugging
+      try {
+        const base64Url = parsedProfile.token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(
+          atob(base64)
+            .split('')
+            .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+            .join('')
+        );
+        const { _id } = JSON.parse(jsonPayload);
+        console.log(`Initializing socket for user ${_id}`);
+      } catch (tokenError) {
+        console.error('Error decoding token:', tokenError);
       }
     } catch (error) {
       console.error('Error parsing profile, skipping socket initialization:', error);
@@ -72,7 +119,38 @@ class SocketService {
 
     this.socket.on('token_update', (data) => {
       console.log('Token update received:', data);
-      this.notifyTokenUpdate(data.tokens);
+      if (data && typeof data.tokens === 'number') {
+        this.notifyTokenUpdate(data.tokens);
+      } else {
+        console.error('Invalid token update data received:', data);
+      }
+    });
+
+    this.socket.on('roll_result', (data) => {
+      console.log('Roll result received:', data);
+      if (data && typeof data.hasWon === 'boolean' && typeof data.winnings === 'number' && typeof data.diceSum === 'number') {
+        this.notifyRollResult(data);
+      } else {
+        console.error('Invalid roll result data received:', data);
+      }
+    });
+
+    this.socket.on('recent_rolls', (data) => {
+      console.log('Recent rolls received:', data);
+      if (Array.isArray(data)) {
+        this.notifyRecentRolls(data);
+      } else {
+        console.error('Invalid recent rolls data received:', data);
+      }
+    });
+
+    this.socket.on('win_streaks', (data) => {
+      console.log('Win streaks received:', data);
+      if (Array.isArray(data)) {
+        this.notifyWinStreaks(data);
+      } else {
+        console.error('Invalid win streaks data received:', data);
+      }
     });
 
     this.socket.on('authentication_successful', (data) => {
@@ -129,19 +207,28 @@ class SocketService {
 
   // Authenticate the user with the socket server
   authenticateUser() {
+    console.log('Authenticating user with socket server');
+
     const profile = localStorage.getItem('profile');
     if (!profile) {
+      console.log('No profile found in localStorage, cannot authenticate');
       return;
     }
 
     try {
-      const { token } = JSON.parse(profile);
-      if (!token) {
+      const parsedProfile = JSON.parse(profile);
+      if (!parsedProfile.token) {
+        console.log('No token found in profile, cannot authenticate');
         return;
       }
 
       // Extract user ID from token
-      const base64Url = token.split('.')[1];
+      const base64Url = parsedProfile.token.split('.')[1];
+      if (!base64Url) {
+        console.error('Invalid token format, cannot extract user ID');
+        return;
+      }
+
       const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
       const jsonPayload = decodeURIComponent(
         atob(base64)
@@ -151,9 +238,27 @@ class SocketService {
       );
       const { _id } = JSON.parse(jsonPayload);
 
-      if (this.socket && _id) {
-        this.socket.emit('authenticate', _id);
+      if (!_id) {
+        console.error('No user ID found in token payload');
+        return;
       }
+
+      if (!this.socket) {
+        console.error('Socket not initialized, cannot authenticate');
+        return;
+      }
+
+      console.log(`Authenticating user ${_id} with socket ${this.socket.id}`);
+      this.socket.emit('authenticate', _id);
+
+      // Check connection status after a short delay
+      setTimeout(() => {
+        if (this.socket && this.socket.connected) {
+          console.log(`Socket ${this.socket.id} is connected after authentication`);
+        } else {
+          console.warn(`Socket is not connected after authentication attempt`);
+        }
+      }, 1000);
     } catch (error) {
       console.error('Error authenticating user with socket:', error);
     }
@@ -167,9 +272,76 @@ class SocketService {
     };
   }
 
+  // Register a callback for roll results
+  onRollResult(callback: (result: RollResult) => void) {
+    this.rollResultCallbacks.push(callback);
+    return () => {
+      this.rollResultCallbacks = this.rollResultCallbacks.filter(cb => cb !== callback);
+    };
+  }
+
+  // Register a callback for recent rolls
+  onRecentRolls(callback: (rolls: RecentRoll[]) => void) {
+    this.recentRollsCallbacks.push(callback);
+    return () => {
+      this.recentRollsCallbacks = this.recentRollsCallbacks.filter(cb => cb !== callback);
+    };
+  }
+
+  // Register a callback for win streaks
+  onWinStreaks(callback: (streaks: WinStreak[]) => void) {
+    this.winStreaksCallbacks.push(callback);
+    return () => {
+      this.winStreaksCallbacks = this.winStreaksCallbacks.filter(cb => cb !== callback);
+    };
+  }
+
   // Notify all registered callbacks about token updates
   private notifyTokenUpdate(tokens: number) {
-    this.tokenUpdateCallbacks.forEach(callback => callback(tokens));
+    console.log(`Notifying ${this.tokenUpdateCallbacks.length} callbacks about token update: ${tokens}`);
+    this.tokenUpdateCallbacks.forEach(callback => {
+      try {
+        callback(tokens);
+      } catch (error) {
+        console.error('Error in token update callback:', error);
+      }
+    });
+  }
+
+  // Notify all registered callbacks about roll results
+  private notifyRollResult(result: RollResult) {
+    console.log(`Notifying ${this.rollResultCallbacks.length} callbacks about roll result: ${result.hasWon ? 'Win' : 'Loss'}`);
+    this.rollResultCallbacks.forEach(callback => {
+      try {
+        callback(result);
+      } catch (error) {
+        console.error('Error in roll result callback:', error);
+      }
+    });
+  }
+
+  // Notify all registered callbacks about recent rolls
+  private notifyRecentRolls(rolls: RecentRoll[]) {
+    console.log(`Notifying ${this.recentRollsCallbacks.length} callbacks about recent rolls: ${rolls.length} rolls`);
+    this.recentRollsCallbacks.forEach(callback => {
+      try {
+        callback(rolls);
+      } catch (error) {
+        console.error('Error in recent rolls callback:', error);
+      }
+    });
+  }
+
+  // Notify all registered callbacks about win streaks
+  private notifyWinStreaks(streaks: WinStreak[]) {
+    console.log(`Notifying ${this.winStreaksCallbacks.length} callbacks about win streaks: ${streaks.length} streaks`);
+    this.winStreaksCallbacks.forEach(callback => {
+      try {
+        callback(streaks);
+      } catch (error) {
+        console.error('Error in win streaks callback:', error);
+      }
+    });
   }
 
   // Check if the socket is connected

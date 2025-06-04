@@ -2,6 +2,7 @@ import Game from "../models/game.js";
 import Wager from "../models/wager.js";
 import User from "../models/user.js";
 import socketService from "./socket-service.js";
+import mongoose from "mongoose";
 
 class GameService {
   private currentGame: any = null;
@@ -13,23 +14,18 @@ class GameService {
     this.startGameCycle();
   }
 
-  // Start the game cycle
   async startGameCycle() {
-    // Clear any existing timeout
     if (this.nextRollTimeout) {
       clearTimeout(this.nextRollTimeout);
     }
 
-    // Create a new game
     await this.createNewGame();
 
-    // Schedule the next roll
     this.nextRollTimeout = setTimeout(() => {
       this.resolveGame();
     }, this.ROLL_INTERVAL);
   }
 
-  // Create a new game
   async createNewGame() {
     const dice1 = Math.floor(Math.random() * 6) + 1;
     const dice2 = Math.floor(Math.random() * 6) + 1;
@@ -46,7 +42,6 @@ class GameService {
     return this.currentGame;
   }
 
-  // Resolve the current game
   async resolveGame() {
     if (!this.currentGame) {
       await this.startGameCycle();
@@ -54,20 +49,99 @@ class GameService {
     }
 
     const gameId = this.currentGame._id;
-
-    // Find all wagers for this game
     const wagers = await Wager.find({ gameId });
 
-    // Process each wager
     for (const wager of wagers) {
       await this.resolveWager(wager);
     }
 
-    // Start a new game cycle
+    await this.broadcastRecentRolls();
+    await this.broadcastWinStreaks();
     await this.startGameCycle();
   }
 
-  // Resolve a single wager
+  async broadcastRecentRolls() {
+    try {
+      const usersWithWagers = await Wager.distinct('userId');
+
+      for (const userId of usersWithWagers) {
+        await this.sendUserRecentRolls(userId.toString());
+      }
+    } catch (error) {
+      console.error("Error broadcasting recent rolls:", error);
+    }
+  }
+
+  async sendUserRecentRolls(userId: string) {
+    try {
+      const userWagers = await Wager.find({ 
+        userId: new mongoose.Types.ObjectId(userId) 
+      })
+        .sort({ _id: -1 })
+        .limit(5)
+        .lean();
+
+      if (userWagers.length === 0) {
+        return;
+      }
+
+      const gameIds = userWagers.map(wager => wager.gameId);
+      const games = await Game.find({ 
+        _id: { $in: gameIds } 
+      }).lean();
+
+      const gamesMap = new Map(
+        games.map(game => [game._id.toString(), game])
+      );
+
+      const formattedRolls = userWagers.map((wager) => {
+        const game = gamesMap.get(wager.gameId.toString());
+        if (!game) return null;
+
+        const diceSum = game.dice1 + game.dice2;
+        return {
+          id: game._id,
+          dice1: game.dice1,
+          dice2: game.dice2,
+          diceSum,
+          isLucky7: game.isLucky7,
+          rollTime: game.rollTime,
+          amount: wager.amount,
+          hasWon: wager.hasWon,
+          isLucky7Wager: wager.isLucky7Wager
+        };
+      }).filter(roll => roll !== null);
+
+      socketService.sendUserRecentRolls(userId, formattedRolls);
+    } catch (error) {
+      console.error(`Error sending recent rolls to user ${userId}:`, error);
+    }
+  }
+
+  async broadcastWinStreaks() {
+    try {
+      const topWinStreaks = await Wager.find({ winStreak: { $gt: 0 } })
+        .sort({ winStreak: -1 })
+        .limit(10)
+        .populate('userId', 'name email')
+        .lean();
+
+      const formattedStreaks = topWinStreaks.map((wager) => {
+        return {
+          // @ts-ignore
+          username: wager.userId.name,
+          winStreak: wager.winStreak,
+          amount: wager.amount,
+          isLucky7Wager: wager.isLucky7Wager,
+        };
+      });
+
+      socketService.broadcastWinStreaks(formattedStreaks);
+    } catch (error) {
+      console.error("Error broadcasting win streaks:", error);
+    }
+  }
+
   async resolveWager(wager: any) {
     const user = await User.findById(wager.userId);
     if (!user) return;
@@ -75,73 +149,71 @@ class GameService {
     const game = await Game.findById(wager.gameId);
     if (!game) return;
 
-    // Determine if the wager won
     const hasWon = wager.isLucky7Wager === game.isLucky7;
 
-    // Calculate winnings
     let winnings = 0;
     if (hasWon) {
-      if (game.isLucky7) {
-        // 7x for lucky 7 win
+      if (wager.isLucky7) {
         winnings = wager.amount * 7;
       } else {
-        // 1x for non-lucky 7 win
         winnings = wager.amount;
       }
     }
 
-    // Update user tokens
     user.tokens += winnings;
     await user.save();
 
-    // Emit token update event
     socketService.updateUserTokens(user._id.toString(), user.tokens);
+    socketService.notifyRollResult(user._id.toString(), hasWon, winnings, game.dice1 + game.dice2);
 
-    // Update wager with result
     wager.hasWon = hasWon;
 
-    // Update win streak
     if (hasWon) {
-      wager.winStreak = 1;
+      const previousWagers = await Wager.find({ 
+        userId: wager.userId,
+        _id: { $ne: wager._id },
+        hasWon: true
+      })
+      .sort({ _id: -1 })
+      .limit(1);
+
+      if (previousWagers.length > 0 && previousWagers[0].winStreak > 0) {
+        wager.winStreak = previousWagers[0].winStreak + 1;
+      } else {
+        wager.winStreak = 1;
+      }
     } else {
       wager.winStreak = 0;
     }
 
     await wager.save();
+    await this.sendUserRecentRolls(user._id.toString());
   }
 
-  // Place a wager
   async placeWager(userId: string, amount: number, isLucky7Wager: boolean) {
-    // Check if there's a current game
     if (!this.currentGame) {
       return { success: false, message: "No active game available" };
     }
 
-    // Check if we're past the cutoff time for wagering
     const timeUntilRoll = this.currentGame.rollTime.getTime() - Date.now();
     if (timeUntilRoll < this.WAGER_CUTOFF) {
       return { success: false, message: "Too late to place a wager for this roll" };
     }
 
-    // Find the user
     const user = await User.findById(userId);
     if (!user) {
       return { success: false, message: "User not found" };
     }
 
-    // Check if user has enough tokens
     if (user.tokens < amount) {
       return { success: false, message: "Not enough tokens" };
     }
 
-    // Deduct tokens from user
     user.tokens -= amount;
     await user.save();
 
-    // Emit token update event
     socketService.updateUserTokens(user._id.toString(), user.tokens);
 
-    // Create the wager
     const wager = await Wager.create({
       userId,
       gameId: this.currentGame._id,
@@ -158,18 +230,15 @@ class GameService {
     };
   }
 
-  // Get the current game
   getCurrentGame() {
     return this.currentGame;
   }
 
-  // Get time until next roll
   getTimeUntilNextRoll() {
     if (!this.currentGame) return 0;
     return Math.max(0, this.currentGame.rollTime.getTime() - Date.now());
   }
 
-  // Check if wagering is allowed
   isWageringAllowed() {
     return this.getTimeUntilNextRoll() > this.WAGER_CUTOFF;
   }

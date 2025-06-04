@@ -35,11 +35,15 @@ export const styles: StylesInterface = {
   profile: {
     display: "flex",
     justifyContent: "space-between",
-    width: "600px",
+    width: "800px",
   },
   userName: {
     display: "flex",
     alignItems: "center",
+    maxWidth: "200px",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
   },
   brandContainer: {
     display: "flex",

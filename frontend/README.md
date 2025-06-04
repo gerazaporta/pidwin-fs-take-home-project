@@ -72,3 +72,21 @@ The application uses JWT (JSON Web Tokens) for authentication. When a user logs 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
 For more information about Create React App, see the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+
+
+## Project Images
+
+Home Page
+![img.png](img.png)
+
+Success 
+![img_1.png](img_1.png)
+
+Failed
+![img_2.png](img_2.png)
+
+Game Result
+![img_3.png](img_3.png)
+
+Win streaks
+![img_4.png](img_4.png)
